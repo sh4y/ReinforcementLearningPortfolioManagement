@@ -1,6 +1,5 @@
 import numpy as np
 import sklearn as sk
-from pandas_datareader import data
 import datetime
 import json, random
 import yfinance as yf
@@ -16,9 +15,12 @@ def generate_random_stocks(n):
         sp500 = json.loads(f.read());
 
     random_stocks = [random.choice(sp500)['Symbol'] for x in range(n)]
+    #append spy as a "random" stock for future use
+    random_stocks.append('SPY')
     return random_stocks
 
 def get_date_data_available_from(random_stocks):
+
     oldest_date = datetime.date.min
     for stock in random_stocks:
         tcker = yf.Ticker(stock)
@@ -34,11 +36,10 @@ def get_price_data_from_date(random_stocks, oldest_date, histories):
     data = {}
     for stock in random_stocks:
         history = histories[stock]
-        subset = history[history.index > oldest_date]
+        subset = np.array(history[history.index > oldest_date])
         data[stock] = subset
     return data
 
-
-#print(history[history.columns.tolist()[1]].tolist())
-#data = yf.download('uber', '', '2019-01-01')
-
+stocks = generate_random_stocks(20)
+oldest_date = get_date_data_available_from(stocks)
+prices = get_price_data_from_date(stocks, oldest_date, histories)
