@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import sklearn as sk
 import datetime
-import json, random
+import json, random, operator
 import yfinance as yf
 yf.pdr_override()
 
@@ -16,6 +16,7 @@ def store_stock_history(stock_name, data):
 def generate_random_stocks(n):
     random_stocks = [random.choice(sp500)['Symbol'] for x in range(n)]
     #append spy as a "random" stock for future use
+    print(random_stocks)
     random_stocks.append('SPY')
     return random_stocks
 
@@ -34,6 +35,8 @@ def get_date_data_available_from(stocks):
             print('Removing stock ' + str(stock) + ' from list, adding a new one.')
             stocks.remove(stock)
             stocks.append(random.choice(sp500)['Symbol'])
+        except Exception as error:
+            raise error
     print('Stocks all exist from: ' + str(oldest_date))
     return oldest_date
 
@@ -60,13 +63,17 @@ def beta(index, stock):
 def calculate_covariances(stocks, prices):
     covars = {}
     for stock in stocks:
-        # calculate covar between stock and index
-        if stock != 'SPY':
-            cov = beta(prices['SPY'], prices[stock])
-            covars[stock] = cov
-    return covars
+        try:
+            # calculate covar between stock and index
+            if stock != 'SPY':
+                cov = beta(prices['SPY'], prices[stock])
+                covars[stock] = cov['Index Changes'][1]
+        except KeyError:
+            print('Got key error for: ' + str(stock))
+    sorted_x = sorted(covars.items(), key=operator.itemgetter(1))
+    return sorted_x
 
-stocks = generate_random_stocks(3)
+stocks = generate_random_stocks(20)
 oldest_date = get_date_data_available_from(stocks)
 prices = get_price_data_from_date(oldest_date, histories)
 betas = calculate_covariances(stocks, prices)
