@@ -1,10 +1,22 @@
 import numpy as np
 import pandas as pd
-import sklearn as sk
 import datetime, dateutil.relativedelta, time
-import json, random, operator
+import json, random, operator, itertools
+import sklearn.model_selection as skm
 import yfinance as yf
+
+from keras.models import Sequential, Model
+from keras.layers import Dense, Activation, Flatten, Input, Concatenate
+from keras.optimizers import Adam
 yf.pdr_override()
+
+class State:
+    def __init__(self, name, shares_owned, returns):
+        self.name = name
+        #only 7 day returns for now
+        self.shares = shares_owned
+        self.returns = returns
+
 
 with open('constituents_json.json', 'r') as f:
     sp500 = json.loads(f.read());
@@ -29,7 +41,7 @@ def generate_random_stocks(n):
 
 def get_date_data_available_from(stocks):
     oldest_date = datetime.date.min
-    print(stocks)
+    store_spy_data()
     for stock in stocks:
         try:
             print('Getting data for stock: ' + stock)
@@ -76,7 +88,9 @@ def beta(index, stock):
     stock_closing_pct_chg = stock['Close'].pct_change()
     d = {'Index Changes': index_closing_pct_chg, 'Stock Change': stock_closing_pct_chg}
     df = pd.DataFrame(d)
-    return df.cov()
+    covariance = df.cov()
+    variance = np.var(stock_closing_pct_chg)
+    return covariance / variance
 
 def calculate_covariances(prices):
     covars = {}
@@ -92,9 +106,31 @@ def calculate_covariances(prices):
     sorted_x = sorted(covars.items(), key=operator.itemgetter(1))
     return sorted_x
 
-stocks = generate_random_stocks(20)
-store_spy_data()
+portfolio_value = 1000000
+stocks = generate_random_stocks(3)  # 2 + spy
 oldest_date = get_date_data_available_from(stocks)
 prices = get_price_data_from_date(oldest_date, histories)
-betas = calculate_covariances(prices)
-print(betas)
+covs = calculate_covariances(prices)
+chosen_stocks = [covs[x][0] for x in range(-2, 2)]
+two_stock_combinations = list(itertools.combinations(chosen_stocks, 2))
+train_comb,test_comb = skm.train_test_split(two_stock_combinations)
+
+actions = np.array([0.25, 0.10, 0.05, 0.1, -0.25, -0.10, -0.05, -0.1])
+state_list = {}
+weights = {}
+
+# Build states
+for stock_combination in train_comb:
+    for stock in stock_combination:
+        states = []
+        returns = pct_change(prices[stock])
+        for x in range(len(returns)-7):
+            sevendayreturn = returns[x:x+7]
+            current_state = State(stock, 0, sevendayreturn)
+            states.append(current_state)
+        if stock not in state_list:
+            state_list[stock] = states
+
+agent = Sequential()
+agent.add(Flatten(input_shape=(1,) + actions.shape))
+print(agent)
