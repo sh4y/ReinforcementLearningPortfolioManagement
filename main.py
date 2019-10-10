@@ -4,11 +4,9 @@ import datetime, dateutil.relativedelta, time
 import json, random, operator, itertools
 import sklearn.model_selection as skm
 import yfinance as yf
+from sklearn.neural_network import MLPRegressor
+import matplotlib.pyplot as plt
 
-from keras.models import Sequential, Model
-from keras.layers import Dense, Activation, Flatten, Input, Concatenate
-from keras.optimizers import Adam
-yf.pdr_override()
 
 class State:
     def __init__(self, name, shares_owned, returns):
@@ -107,30 +105,62 @@ def calculate_covariances(prices):
     return sorted_x
 
 portfolio_value = 1000000
-stocks = generate_random_stocks(3)  # 2 + spy
-oldest_date = get_date_data_available_from(stocks)
+stocks = generate_random_stocks(5)  # 2 + spy/
+oldest_date = get_date_data_available_from(stocks)' '
 prices = get_price_data_from_date(oldest_date, histories)
 covs = calculate_covariances(prices)
 chosen_stocks = [covs[x][0] for x in range(-2, 2)]
 two_stock_combinations = list(itertools.combinations(chosen_stocks, 2))
 train_comb,test_comb = skm.train_test_split(two_stock_combinations)
+print(train_comb)
+print(test_comb)
 
 actions = np.array([0.25, 0.10, 0.05, 0.1, -0.25, -0.10, -0.05, -0.1])
 state_list = {}
 weights = {}
 
-# Build states
-for stock_combination in train_comb:
-    for stock in stock_combination:
-        states = []
-        returns = pct_change(prices[stock])
-        for x in range(len(returns)-7):
-            sevendayreturn = returns[x:x+7]
-            current_state = State(stock, 0, sevendayreturn)
-            states.append(current_state)
-        if stock not in state_list:
-            state_list[stock] = states
+train_data = []
+ytrain_data = []
+for combination in train_comb:
+    stock1 = combination[0]
+    stock2 = combination[1]
+    stock1_Closing = prices[stock1]['Close']
+    stock2_Closing = prices[stock2]['Close']
+    xt = pd.DataFrame({ str(combination): stock1_Closing,
+                            str(combination) + "2": stock2_Closing},
+                            columns=[str(combination), str(combination) + "2"])
+    train_data.append(xt)
 
-agent = Sequential()
-agent.add(Flatten(input_shape=(1,) + actions.shape))
-print(agent)
+    yt = pd.DataFrame({'data': prices['SPY']['Close']}, columns=['data'])
+    ytrain_data.append(yt)
+
+xtrain = pd.concat(train_data, ignore_index=True, axis=0)
+ytrain = pd.concat(ytrain_data, ignore_index=True, axis=0)
+
+print(xtrain.shape)
+print(ytrain.shape)
+
+mod = MLPRegressor(hidden_layer_sizes=(5,), activation='relu', solver='adam',
+                   learning_rate='adaptive', max_iter=1000, learning_rate_init=0.01, alpha=0.01)
+
+mod.fit(xtrain, ytrain)
+
+
+test_data = []
+for combination in test_comb:
+    stock1 = combination[0]
+    stock2 = combination[1]
+    stock1_Closing = prices[stock1]['Close']
+    stock2_Closing = prices[stock2]['Close']
+    xt = pd.DataFrame({ str(combination): stock1_Closing,
+                            str(combination) + "2": stock2_Closing},
+                            columns=[str(combination), str(combination) + "2"])
+    test_data.append(xt)
+
+xtest = pd.concat(test_data, ignore_index=True, axis=1)
+print(xtest.shape)
+print(list(xtest.columns))
+Y = mod.predict(xtest)
+plt.plot(Y)
+plt.plot(ytrain)
+plt.show()
